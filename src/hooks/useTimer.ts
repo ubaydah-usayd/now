@@ -8,29 +8,13 @@ const SESSION_DURATION = 50 * 60; // 50 minutes
 export const useTimer = () => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isSwitchingProjectRef = useRef<boolean>(false);
-  const { timer } = useNowStore();
+  const { timer, isInitialized } = useNowStore();
 
   const startTimer = useCallback((projectId: string) => {
     const currentState = useNowStore.getState();
     
     // Marquer qu'on est en train de switcher de projet
     isSwitchingProjectRef.current = true;
-    
-    // Si un projet est déjà en cours ET différent du nouveau projet, sauvegarder le temps passé
-    if (currentState.timer.currentProjectId && 
-        currentState.timer.currentProjectId !== projectId && 
-        currentState.timer.currentProjectId !== null) {
-      // Sauvegarder le temps restant du projet actuel
-      useNowStore.setState((state) => ({
-        timer: {
-          ...state.timer,
-          projectSessionProgress: {
-            ...state.timer.projectSessionProgress,
-            [currentState.timer.currentProjectId!]: currentState.timer.timeRemaining
-          }
-        }
-      }));
-    }
     
     // Nettoyer l'interval avant de démarrer une nouvelle session
     if (intervalRef.current) {
@@ -91,6 +75,39 @@ export const useTimer = () => {
     return timeRemaining;
   }, [timer.sessionStartTime, timer.isRunning, timer.isPaused, timer.currentProjectId, timer.timeRemaining]);
 
+  // Restaurer les sessions en cours au démarrage seulement
+  useEffect(() => {
+    if (isInitialized && !timer.isRunning) {
+      // Vérifier s'il y a des sessions en cours à restaurer (projectSessionProgress)
+      const sessionsInProgress = Object.entries(timer.projectSessionProgress)
+        .filter(([projectId, timeRemaining]) => timeRemaining > 0 && timeRemaining < SESSION_DURATION)
+        .sort(([, a], [, b]) => b - a); // Trier par temps restant décroissant
+      
+      if (sessionsInProgress.length > 0) {
+        const [projectId, timeRemaining] = sessionsInProgress[0];
+        console.log(`🔄 Restauration de la session en cours pour le projet ${projectId} (${timeRemaining}s restantes)`);
+        
+        // Restaurer la session la plus récente
+        const elapsedTime = SESSION_DURATION - timeRemaining;
+        const sessionStartTime = new Date(Date.now() - (elapsedTime * 1000));
+        
+        useNowStore.setState((state) => ({
+          timer: {
+            ...state.timer,
+            isRunning: true,
+            isPaused: false,
+            currentProjectId: projectId,
+            timeRemaining: timeRemaining,
+            totalTime: SESSION_DURATION,
+            sessionStartTime: sessionStartTime,
+            pauseStartTime: null,
+          },
+          activeSessionStart: sessionStartTime,
+        }));
+      }
+    }
+  }, [isInitialized]); // Seulement au démarrage
+
   // Gestion du countdown basé sur le temps réel
   useEffect(() => {
     // Nettoyer l'interval précédent
@@ -125,8 +142,31 @@ export const useTimer = () => {
             }
           }));
           
-          // Synchroniser l'état du timer en temps réel
-          useNowStore.getState().syncTimerState();
+          // Sauvegarder périodiquement le temps écoulé (toutes les 30 secondes)
+          const currentTime = Date.now();
+          const lastSave = currentState.lastTimerSync || 0;
+          if (currentTime - lastSave > 30000) { // 30 secondes
+            // Sauvegarder la progression de la session en cours
+            const currentProjectId = currentState.timer.currentProjectId;
+            
+            if (currentProjectId) {
+              useNowStore.setState((state) => ({
+                timer: {
+                  ...state.timer,
+                  projectSessionProgress: {
+                    ...state.timer.projectSessionProgress,
+                    [currentProjectId]: newTimeRemaining
+                  }
+                }
+              }));
+              
+              // Sauvegarder immédiatement
+              setTimeout(() => {
+                const { saveState } = useNowStore.getState();
+                saveState();
+              }, 100);
+            }
+          }
         } else {
           // Session terminée - afficher le modal
           if (intervalId) {

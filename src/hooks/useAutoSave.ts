@@ -32,16 +32,35 @@ export const useAutoSave = () => {
     const unsubscribeAppState = firebaseManager.onAppStateChange((appState) => {
       console.log('📡 Changement d\'état reçu:', appState);
       
-      // Mettre à jour l'état local si nécessaire
+      // Écouter les changements d'état d'avancement depuis Firebase
+      // mais éviter les boucles de synchronisation
       if (appState.timer) {
-        useNowStore.setState((state) => ({
-          timer: {
-            ...state.timer,
-            ...appState.timer
-          },
-          activeSessionStart: appState.activeSessionStart || state.activeSessionStart,
-          activeBreakStart: appState.activeBreakStart || state.activeBreakStart
-        }));
+        const currentState = useNowStore.getState();
+        
+        // Ne mettre à jour que les données d'avancement importantes
+        // sans toucher au timer en cours d'exécution
+        const shouldUpdate = 
+          currentState.timer.projectSessions !== (appState.timer?.projectSessions || {}) ||
+          currentState.timer.projectSessionProgress !== (appState.timer?.projectSessionProgress || {}) ||
+          currentState.timer.currentProjectId !== appState.timer?.currentProjectId;
+        
+        if (shouldUpdate && !currentState.timer.isRunning && appState.timer) {
+          console.log('📡 Mise à jour de l\'état d\'avancement depuis Firebase');
+          useNowStore.setState((state) => ({
+            timer: {
+              ...state.timer,
+              projectSessions: appState.timer!.projectSessions || state.timer.projectSessions,
+              // Fusionner les sessions sauvegardées au lieu de les écraser
+              projectSessionProgress: {
+                ...state.timer.projectSessionProgress,
+                ...appState.timer!.projectSessionProgress
+              },
+              currentProjectId: appState.timer!.currentProjectId || state.timer.currentProjectId
+            },
+            activeSessionStart: appState.activeSessionStart || state.activeSessionStart,
+            activeBreakStart: appState.activeBreakStart || state.activeBreakStart
+          }));
+        }
       }
     });
 
@@ -75,14 +94,75 @@ export const useAutoSave = () => {
   // Sauvegarder quand l'utilisateur quitte la page
   useEffect(() => {
     const handleBeforeUnload = () => {
+      console.log('💾 Sauvegarde avant fermeture de la page');
+      const currentState = useNowStore.getState();
+      
+      // Sauvegarder immédiatement l'état actuel
+      if (currentState.timer.isRunning && currentState.timer.currentProjectId) {
+        // Sauvegarder la progression de la session en cours
+        const updatedTimer = {
+          ...currentState.timer,
+          projectSessionProgress: {
+            ...currentState.timer.projectSessionProgress,
+            [currentState.timer.currentProjectId]: currentState.timer.timeRemaining
+          }
+        };
+        
+        // Sauvegarder dans localStorage
+        localStorage.setItem('timer', JSON.stringify(updatedTimer));
+        localStorage.setItem('projectSessionProgress', JSON.stringify(updatedTimer.projectSessionProgress));
+      }
+      
       saveState();
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        console.log('💾 Sauvegarde lors du changement de visibilité');
+        const currentState = useNowStore.getState();
+        
+        // Sauvegarder la progression de la session en cours
+        if (currentState.timer.isRunning && currentState.timer.currentProjectId) {
+          const updatedTimer = {
+            ...currentState.timer,
+            projectSessionProgress: {
+              ...currentState.timer.projectSessionProgress,
+              [currentState.timer.currentProjectId]: currentState.timer.timeRemaining
+            }
+          };
+          
+          // Sauvegarder dans localStorage
+          localStorage.setItem('timer', JSON.stringify(updatedTimer));
+          localStorage.setItem('projectSessionProgress', JSON.stringify(updatedTimer.projectSessionProgress));
+        }
+        
         saveState();
       }
     };
+
+    // Sauvegarder périodiquement les sessions en cours
+    const periodicSaveInterval = setInterval(() => {
+      const currentState = useNowStore.getState();
+      if (currentState.timer.isRunning && currentState.timer.currentProjectId) {
+        // Sauvegarder la session en cours toutes les 10 secondes
+        console.log('💾 Sauvegarde périodique de la session en cours');
+        
+        // Mettre à jour la progression de la session
+        const updatedTimer = {
+          ...currentState.timer,
+          projectSessionProgress: {
+            ...currentState.timer.projectSessionProgress,
+            [currentState.timer.currentProjectId]: currentState.timer.timeRemaining
+          }
+        };
+        
+        // Sauvegarder dans localStorage
+        localStorage.setItem('timer', JSON.stringify(updatedTimer));
+        localStorage.setItem('projectSessionProgress', JSON.stringify(updatedTimer.projectSessionProgress));
+        
+        saveState();
+      }
+    }, 10000); // 10 secondes
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -90,6 +170,7 @@ export const useAutoSave = () => {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(periodicSaveInterval);
       
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);

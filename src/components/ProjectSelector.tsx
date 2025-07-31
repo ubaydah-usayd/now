@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNowStore } from '../store';
 import { useTimer } from '../hooks/useTimer';
 import { getProjectColor } from '../utils/colors';
+import { auth } from '../firebase/config';
 
 // Fonction pour assombrir une couleur
 function darkenColor(hex: string, percent: number = 20): string {
@@ -42,9 +43,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({ projectId }) =
   if (!project) return null;
 
   const handleProjectClick = () => {
-    if (timer.currentProjectId !== projectId) {
-      startTimer(projectId);
-    }
+    // Permettre de changer de projet même si c'est le projet actuel
+    // Cela permet de reprendre une session en cours ou de changer de projet
+    startTimer(projectId);
   };
 
   const handleIndicatorRightClick = (e: React.MouseEvent, sessionIndex: number) => {
@@ -64,8 +65,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({ projectId }) =
     const now = new Date();
     const startTime = new Date(now.getTime() - (50 * 60 * 1000)); // 50 minutes en arrière
 
-    
-    // Mettre à jour l'état du projet pour incrémenter les sessions complétées
+    // Mettre à jour l'état du projet ET du timer pour incrémenter les sessions complétées
     useNowStore.setState((state) => {
       const updatedProjects = state.projects.map(p => {
         if (p.id === projectId) {
@@ -74,10 +74,35 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({ projectId }) =
         return p;
       });
 
+      const newProjectSessions = {
+        ...state.timer.projectSessions,
+        [projectId]: (state.timer.projectSessions[projectId] || 0) + SESSION_DURATION
+      };
+
       return {
-        projects: updatedProjects
+        projects: updatedProjects,
+        timer: {
+          ...state.timer,
+          projectSessions: newProjectSessions
+        }
       };
     });
+
+    // SAUVEGARDER IMMÉDIATEMENT après validation de session
+    setTimeout(() => {
+      const { saveState, _saveProjects } = useNowStore.getState();
+      const user = auth.currentUser;
+      
+      if (user?.uid) {
+        // Sauvegarder dans Firebase
+        _saveProjects(useNowStore.getState().projects);
+        saveState();
+      } else {
+        // Sauvegarder dans localStorage
+        _saveProjects(useNowStore.getState().projects);
+        localStorage.setItem('projectSessions', JSON.stringify(useNowStore.getState().timer.projectSessions));
+      }
+    }, 100);
     
     addLogEntry(
       'session_interval',
@@ -113,23 +138,8 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({ projectId }) =
   // Utiliser project.completedSessions comme source de vérité pour éviter les désynchronisations
   const sessionsCompleted = project.completedSessions;
   
-  // Synchroniser timer.projectSessions avec project.completedSessions si nécessaire
-  useEffect(() => {
-    const expectedTimeSpent = sessionsCompleted * SESSION_DURATION;
-    const actualTimeSpent = timer.projectSessions[projectId] || 0;
-    
-    if (Math.abs(expectedTimeSpent - actualTimeSpent) > 60) { // Tolérance de 1 minute
-      useNowStore.setState((state) => ({
-        timer: {
-          ...state.timer,
-          projectSessions: {
-            ...state.timer.projectSessions,
-            [projectId]: expectedTimeSpent
-          }
-        }
-      }));
-    }
-  }, [sessionsCompleted, projectId, timer.projectSessions]);
+  // Suppression des useEffect qui causaient une boucle infinie
+  // La synchronisation se fait maintenant de manière unidirectionnelle dans le store
 
   
   const isProjectCompleted = sessionsCompleted >= project.dailyHours;
@@ -171,13 +181,24 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({ projectId }) =
 
       
       {/* Progrès de la session en cours */}
-      {timer.projectSessionProgress[project.id] !== undefined && 
-       timer.projectSessionProgress[project.id] > 0 && 
-       timer.projectSessionProgress[project.id] < SESSION_DURATION && (
-        <div className="text-xs text-now-green mt-1">
-          Session en cours: {Math.floor(timer.projectSessionProgress[project.id] / 60)}:{(timer.projectSessionProgress[project.id] % 60).toString().padStart(2, '0')}
-        </div>
-      )}
+      {(() => {
+        const sessionInProgress = timer.projectSessionProgress[project.id];
+        const hasIncompleteSession = sessionInProgress && sessionInProgress > 0 && sessionInProgress < SESSION_DURATION;
+        
+        if (hasIncompleteSession) {
+          const timeRemaining = sessionInProgress;
+          return (
+            <div className="text-xs text-now-green mt-1">
+              {timer.currentProjectId === project.id && timer.isRunning ? (
+                `Session en cours: ${Math.floor(timeRemaining / 60)}:${(timeRemaining % 60).toString().padStart(2, '0')}`
+              ) : (
+                `Session sauvegardée: ${Math.floor(timeRemaining / 60)}:${(timeRemaining % 60).toString().padStart(2, '0')}`
+              )}
+            </div>
+          );
+        }
+        return null;
+      })()}
       
       {/* Indicateurs de progression */}
       <div className="flex space-x-1 mt-2">

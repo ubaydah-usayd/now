@@ -16,11 +16,11 @@ import { useAutoSave } from './hooks/useAutoSave';
 import { useAuth } from './hooks/useAuth';
 
 import { ProjectManager } from './components/ProjectManager';
+import { LogoutButton } from './components/LogoutButton';
 import { Settings } from 'lucide-react';
 import { getProjectColor } from './utils/colors';
-import { DebugPanel } from './components/DebugPanel';
-import { SyncStatus } from './components/SyncStatus';
-import { SessionProgress } from './components/SessionProgress';
+
+
 
 // Fonction pour assombrir une couleur de 50%
 function darkenColor(hex: string, percent: number = 50): string {
@@ -47,7 +47,7 @@ function App() {
   useAutoSave();
   
   // Initialiser la base de données
-  const { initDatabase, timer, checkAndPerformDailyReset, projects } = useNowStore();
+  const { initDatabase, timer, checkAndPerformDailyReset, projects, isInitialized } = useNowStore();
   
   // État pour le gestionnaire de projets
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
@@ -95,12 +95,17 @@ function App() {
   
   useEffect(() => {
     const initializeApp = async () => {
-      try {
-        await initDatabase();
-        // Vérifier la réinitialisation quotidienne au démarrage
-        checkAndPerformDailyReset();
-      } catch (error) {
-        console.error('Erreur lors de l\'initialisation de la base de données:', error);
+      // Vérifier la réinitialisation quotidienne au démarrage
+      checkAndPerformDailyReset();
+      
+      // Initialiser la base de données seulement si l'utilisateur est connecté et que le store n'est pas encore initialisé
+      if (user && !isInitialized) {
+        try {
+          console.log('🔄 Initialisation de la base de données...');
+          await initDatabase();
+        } catch (error) {
+          console.error('Erreur lors de l\'initialisation de la base de données:', error);
+        }
       }
     };
     
@@ -112,21 +117,25 @@ function App() {
     return () => {
       clearInterval(interval);
     };
-  }, [initDatabase, checkAndPerformDailyReset]);
+  }, [user, isInitialized, initDatabase, checkAndPerformDailyReset]);
 
   // Si l'utilisateur n'est pas connecté, afficher l'écran de connexion
   if (!loading && !user) {
+    console.log('🔐 Affichage de l\'écran de connexion');
     return <Auth />;
   }
 
   // Si en cours de chargement, afficher un écran de chargement
   if (loading) {
+    console.log('⏳ Affichage de l\'écran de chargement');
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="text-white text-xl">Chargement...</div>
       </div>
     );
   }
+
+  console.log('🎯 Affichage de l\'application principale');
 
   return (
     <div className="min-h-screen text-white" style={getBackgroundStyle()}>
@@ -141,12 +150,9 @@ function App() {
           {/* Header NOW */}
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-white mb-4">NOW</h1>
-            <img 
-              src="/verse.png" 
-              alt="Verse" 
-              className="max-w-2xl mx-auto rounded-lg"
-              style={{ maxHeight: '240px' }}
-            />
+            <div className="max-w-2xl mx-auto rounded-lg bg-gray-700 p-12 flex items-center justify-center" style={{ maxHeight: '240px' }}>
+              <span className="text-6xl font-bold text-white">NOW</span>
+            </div>
           </div>
 
           {/* Timer */}
@@ -240,6 +246,7 @@ function App() {
             <SoundControl />
             <DataManager />
             <PauseButton />
+            <LogoutButton />
           </div>
         </div>
       </div>
@@ -253,14 +260,9 @@ function App() {
         onClose={() => setIsProjectManagerOpen(false)}
       />
       
-      {/* Debug Panel */}
-      <DebugPanel />
+
       
-      {/* Statut de synchronisation */}
-      <SyncStatus />
-      
-      {/* Progression des sessions */}
-      <SessionProgress />
+
     </div>
   );
 }

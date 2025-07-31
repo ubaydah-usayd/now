@@ -60,6 +60,7 @@ interface NowStore extends AppState {
   // État de synchronisation
   isInitialized: boolean;
   isSyncing: boolean;
+  lastTimerSync: number | null;
   
   // Fonctions helper pour la sauvegarde
   _saveTasks: (tasks: Task[]) => void;
@@ -90,6 +91,7 @@ export const useNowStore = create<NowStore>((set, get) => ({
   lastResetDate: undefined as string | undefined,
   isInitialized: false,
   isSyncing: false,
+  lastTimerSync: null,
 
   // Fonction helper pour sauvegarder les tâches
   _saveTasks: (tasks: Task[]) => {
@@ -117,21 +119,66 @@ export const useNowStore = create<NowStore>((set, get) => ({
       const user = auth.currentUser;
       console.log('🔄 Initialisation du DataManager pour l\'utilisateur:', user?.uid || 'non connecté');
       
-      // Nettoyer FORCÉMENT le localStorage au démarrage pour éviter les conflits
+      // Marquer comme en cours de synchronisation
+      set({ isSyncing: true });
+      
       if (!user?.uid) {
-        console.log('🧹 Nettoyage forcé du localStorage au démarrage...');
-        localStorage.removeItem('timer');
-        localStorage.removeItem('sessionProgress');
-        localStorage.removeItem('activeSessionStart');
-        localStorage.removeItem('activeBreakStart');
-        localStorage.removeItem('currentSession');
-        localStorage.removeItem('showSessionModal');
-        localStorage.removeItem('appState');
-        localStorage.removeItem('lastResetDate');
-        localStorage.removeItem('projectSessions');
-        localStorage.removeItem('projectSessionProgress');
-        localStorage.removeItem('syncState');
-        localStorage.removeItem('lastSync');
+        console.log('⚠️ Aucun utilisateur connecté, utilisation du localStorage');
+        
+        // Charger les données depuis le localStorage
+        const localStorageData = {
+          projects: JSON.parse(localStorage.getItem('projects') || '[]'),
+          tasks: JSON.parse(localStorage.getItem('tasks') || '[]'),
+          sessions: JSON.parse(localStorage.getItem('sessions') || '[]'),
+          showSessionModal: JSON.parse(localStorage.getItem('showSessionModal') || 'false'),
+          currentSession: JSON.parse(localStorage.getItem('currentSession') || 'null'),
+          lastResetDate: localStorage.getItem('lastResetDate') || undefined,
+        };
+
+        // Synchroniser les projets avec les sessions complétées
+        const projectSessions = JSON.parse(localStorage.getItem('projectSessions') || '{}');
+        const synchronizedProjects = localStorageData.projects.map((project: any) => {
+          const timeSpent = projectSessions[project.id] || 0;
+          const completedSessions = Math.floor(timeSpent / SESSION_DURATION);
+          return {
+            ...project,
+            completedSessions: Math.max(project.completedSessions || 0, completedSessions)
+          };
+        });
+
+        // Timer avec préservation des sessions complétées ET en cours
+        const cleanTimer = {
+          isRunning: false,
+          isPaused: false,
+          currentProjectId: null,
+          timeRemaining: SESSION_DURATION,
+          totalTime: SESSION_DURATION,
+          sessionStartTime: null,
+          pauseStartTime: null,
+          // PRÉSERVER les sessions complétées ET en cours depuis localStorage
+          projectSessions: JSON.parse(localStorage.getItem('projectSessions') || '{}'),
+          projectSessionProgress: JSON.parse(localStorage.getItem('projectSessionProgress') || '{}'),
+        };
+        
+        // Forcer la sauvegarde du timer propre
+        localStorage.setItem('timer', JSON.stringify(cleanTimer));
+
+        set(() => ({
+          projects: synchronizedProjects,
+          tasks: localStorageData.tasks,
+          sessions: localStorageData.sessions,
+          timer: cleanTimer,
+          showSessionModal: localStorageData.showSessionModal,
+          currentSession: localStorageData.currentSession,
+          activeSessionStart: null,
+          activeBreakStart: null,
+          lastResetDate: localStorageData.lastResetDate,
+          isInitialized: true,
+          isSyncing: false
+        }));
+        
+        console.log('✅ Initialisation localStorage terminée - Timer réinitialisé');
+        return;
       }
       
       // Marquer comme en cours de synchronisation
@@ -150,24 +197,36 @@ export const useNowStore = create<NowStore>((set, get) => ({
           lastResetDate: localStorage.getItem('lastResetDate') || undefined,
         };
 
-        // Timer FORCÉMENT réinitialisé proprement - ignorer toute donnée existante
-        const cleanTimer = {
-          isRunning: false,
-          isPaused: false,
-          currentProjectId: null,
-          timeRemaining: SESSION_DURATION,
-          totalTime: SESSION_DURATION,
-          sessionStartTime: null,
-          pauseStartTime: null,
-          projectSessions: {},
-          projectSessionProgress: {},
-        };
+        // Synchroniser les projets avec les sessions complétées
+        const projectSessions = JSON.parse(localStorage.getItem('projectSessions') || '{}');
+        const synchronizedProjects = localStorageData.projects.map((project: any) => {
+          const timeSpent = projectSessions[project.id] || 0;
+          const completedSessions = Math.floor(timeSpent / SESSION_DURATION);
+          return {
+            ...project,
+            completedSessions: Math.max(project.completedSessions || 0, completedSessions)
+          };
+        });
+
+              // Timer réinitialisé mais en préservant les sessions complétées ET en cours
+      const cleanTimer = {
+        isRunning: false,
+        isPaused: false,
+        currentProjectId: null,
+        timeRemaining: SESSION_DURATION,
+        totalTime: SESSION_DURATION,
+        sessionStartTime: null,
+        pauseStartTime: null,
+        // PRÉSERVER les sessions complétées ET en cours depuis localStorage
+        projectSessions: JSON.parse(localStorage.getItem('projectSessions') || '{}'),
+        projectSessionProgress: JSON.parse(localStorage.getItem('projectSessionProgress') || '{}'),
+      };
         
         // Forcer la sauvegarde du timer propre
         localStorage.setItem('timer', JSON.stringify(cleanTimer));
 
         set(() => ({
-          projects: localStorageData.projects,
+          projects: synchronizedProjects,
           tasks: localStorageData.tasks,
           sessions: localStorageData.sessions,
           timer: cleanTimer,
@@ -212,18 +271,19 @@ export const useNowStore = create<NowStore>((set, get) => ({
         sessions: cleanSessions.length
       });
       
-      // Timer FORCÉMENT réinitialisé proprement - ignorer toute donnée existante
-      const cleanTimer = {
-        isRunning: false,
-        isPaused: false,
-        currentProjectId: null,
-        timeRemaining: SESSION_DURATION,
-        totalTime: SESSION_DURATION,
-        sessionStartTime: null,
-        pauseStartTime: null,
-        projectSessions: data.timer?.projectSessions || {},
-        projectSessionProgress: data.timer?.projectSessionProgress || {},
-      };
+              // Timer réinitialisé mais en préservant les sessions complétées ET en cours
+        const cleanTimer = {
+          isRunning: false,
+          isPaused: false,
+          currentProjectId: null,
+          timeRemaining: SESSION_DURATION,
+          totalTime: SESSION_DURATION,
+          sessionStartTime: null,
+          pauseStartTime: null,
+          // PRÉSERVER les sessions complétées ET en cours depuis localStorage
+          projectSessions: JSON.parse(localStorage.getItem('projectSessions') || '{}'),
+          projectSessionProgress: JSON.parse(localStorage.getItem('projectSessionProgress') || '{}'),
+        };
 
       set(() => ({
         projects: cleanProjects,
@@ -319,11 +379,25 @@ export const useNowStore = create<NowStore>((set, get) => ({
           lastResetDate: state.lastResetDate
         });
         
+        // Sauvegarder spécifiquement les sessions complétées et en cours
+        localStorage.setItem('projectSessions', JSON.stringify(state.timer.projectSessions));
+        localStorage.setItem('projectSessionProgress', JSON.stringify(state.timer.projectSessionProgress));
+        
         console.log('✅ État sauvegardé dans localStorage');
       } else {
-        // Sauvegarder dans Firebase
+        // Sauvegarder l'état d'avancement en préservant les sessions sauvegardées
+        const timerStateToSave = {
+          ...state.timer,
+          // Ne pas sauvegarder timeRemaining si le timer est en cours pour éviter les oscillations
+          timeRemaining: state.timer.isRunning ? SESSION_DURATION : state.timer.timeRemaining,
+          // Ne pas sauvegarder sessionStartTime si le timer est en cours
+          sessionStartTime: state.timer.isRunning ? null : state.timer.sessionStartTime,
+          // IMPORTANT: Préserver projectSessionProgress pour les sessions sauvegardées
+          projectSessionProgress: state.timer.projectSessionProgress
+        };
+        
         await firebaseManager.saveAppState({
-          timer: state.timer,
+          timer: timerStateToSave,
           showSessionModal: state.showSessionModal,
           currentSession: state.currentSession,
           activeSessionStart: state.activeSessionStart,
@@ -331,14 +405,14 @@ export const useNowStore = create<NowStore>((set, get) => ({
           lastResetDate: state.lastResetDate
         });
         
-        console.log('✅ État sauvegardé dans Firebase');
+        console.log('✅ État d\'avancement sauvegardé dans Firebase');
       }
     } catch (error) {
       console.error('❌ Erreur lors de la sauvegarde de l\'état:', error);
     }
   },
 
-  // Nouvelle fonction pour synchroniser l'état du timer en temps réel
+  // Synchroniser l'état d'avancement du timer de manière intelligente
   syncTimerState: async () => {
     try {
       const state = get();
@@ -355,18 +429,39 @@ export const useNowStore = create<NowStore>((set, get) => ({
         return;
       }
       
-      console.log('🔄 Synchronisation timer en temps réel...');
+      // Protection contre les synchronisations trop fréquentes
+      const now = Date.now();
+      const lastSync = state.lastTimerSync || 0;
+      if (now - lastSync < 5000) { // Attendre au moins 5 secondes entre les syncs
+        return;
+      }
       
-      // Sauvegarder uniquement l'état du timer pour une synchronisation rapide
+      console.log('🔄 Synchronisation état d\'avancement...');
+      
+      set({ isSyncing: true, lastTimerSync: now });
+      
+      // Sauvegarder l'état d'avancement en préservant les sessions sauvegardées
+      const timerStateToSave = {
+        ...state.timer,
+        // Ne pas sauvegarder timeRemaining si le timer est en cours pour éviter les oscillations
+        timeRemaining: state.timer.isRunning ? SESSION_DURATION : state.timer.timeRemaining,
+        // Ne pas sauvegarder sessionStartTime si le timer est en cours
+        sessionStartTime: state.timer.isRunning ? null : state.timer.sessionStartTime,
+        // IMPORTANT: Préserver projectSessionProgress pour les sessions sauvegardées
+        projectSessionProgress: state.timer.projectSessionProgress
+      };
+      
       await firebaseManager.saveAppState({
-        timer: state.timer,
+        timer: timerStateToSave,
         activeSessionStart: state.activeSessionStart,
         activeBreakStart: state.activeBreakStart
       });
       
-      console.log('✅ Timer synchronisé');
+      set({ isSyncing: false });
+      console.log('✅ État d\'avancement synchronisé');
     } catch (error) {
-      console.error('❌ Erreur synchronisation timer:', error);
+      console.error('❌ Erreur synchronisation état d\'avancement:', error);
+      set({ isSyncing: false });
     }
   },
 
@@ -631,15 +726,22 @@ export const useNowStore = create<NowStore>((set, get) => ({
     const project = state.getProjectById(projectId);
     if (!project) return;
 
-    const sessionProgress = state.timer.projectSessionProgress[projectId];
-    const timeRemaining = (sessionProgress && sessionProgress > 0) ? sessionProgress : SESSION_DURATION;
-
+    // Vérifier s'il y a une session en cours pour ce projet
+    const sessionInProgress = state.timer.projectSessionProgress[projectId];
+    let timeRemaining: number;
     let sessionStartTime: Date;
-    if (sessionProgress && sessionProgress > 0) {
-      const elapsedTime = SESSION_DURATION - sessionProgress;
+
+    if (sessionInProgress && sessionInProgress > 0 && sessionInProgress < SESSION_DURATION) {
+      // Reprendre une session en cours
+      timeRemaining = sessionInProgress;
+      const elapsedTime = SESSION_DURATION - timeRemaining;
       sessionStartTime = new Date(Date.now() - (elapsedTime * 1000));
+      console.log(`🔄 Reprise de session en cours pour ${project.name} (${timeRemaining}s restantes)`);
     } else {
+      // Nouvelle session
+      timeRemaining = SESSION_DURATION;
       sessionStartTime = new Date();
+      console.log(`🚀 Nouvelle session démarrée pour ${project.name}`);
     }
 
     set((state) => {
@@ -667,14 +769,14 @@ export const useNowStore = create<NowStore>((set, get) => ({
     });
 
     // Ajouter un log
-    const isNewSession = !sessionProgress || sessionProgress === 0;
+    const isNewSession = !sessionInProgress || sessionInProgress === 0;
     const logMessage = isNewSession 
       ? `Session démarrée pour ${project.name}` 
       : `Session reprise pour ${project.name}`;
     get().addLogEntry('session_interval', logMessage, projectId, undefined, sessionStartTime, undefined, undefined);
 
-    // Synchroniser immédiatement l'état du timer
-    get().syncTimerState();
+    // Synchroniser uniquement l'état général, pas le timer en cours d'exécution
+    get().saveState();
   },
 
   pauseTimer: () => {
@@ -721,8 +823,8 @@ export const useNowStore = create<NowStore>((set, get) => ({
         };
       }
     });
-    // Synchroniser immédiatement l'état du timer
-    get().syncTimerState();
+    // Synchroniser uniquement l'état général, pas le timer en cours d'exécution
+    get().saveState();
   },
 
   stopTimer: () => {
@@ -759,28 +861,29 @@ export const useNowStore = create<NowStore>((set, get) => ({
       activeSessionStart: null,
     }));
     
-    // Synchroniser immédiatement l'état du timer
-    get().syncTimerState();
+    // Synchroniser uniquement l'état général, pas le timer en cours d'exécution
+    get().saveState();
   },
 
   resetTimer: () => {
     set((state) => ({
-      timer: {
-        ...state.timer,
-        isRunning: false,
-        isPaused: false,
-        currentProjectId: null,
-        timeRemaining: SESSION_DURATION,
-        totalTime: SESSION_DURATION,
-        sessionStartTime: null,
-        pauseStartTime: null,
-        projectSessionProgress: {},
-      },
+              timer: {
+          ...state.timer,
+          isRunning: false,
+          isPaused: false,
+          currentProjectId: null,
+          timeRemaining: SESSION_DURATION,
+          totalTime: SESSION_DURATION,
+          sessionStartTime: null,
+          pauseStartTime: null,
+          // SOLUTION RADICALE : Vider complètement projectSessionProgress
+          projectSessionProgress: {},
+        },
       activeSessionStart: null,
     }));
     
-    // Synchroniser immédiatement l'état du timer
-    get().syncTimerState();
+    // Synchroniser uniquement l'état général, pas le timer en cours d'exécution
+    get().saveState();
   },
 
   // === SESSIONS ===
@@ -839,9 +942,10 @@ export const useNowStore = create<NowStore>((set, get) => ({
           sessionStartTime: null,
           pauseStartTime: null,
           projectSessions: newProjectSessions,
+          // Ne vider que la session du projet actuel, pas toutes les sessions
           projectSessionProgress: {
             ...state.timer.projectSessionProgress,
-            [state.timer.currentProjectId!]: 0
+            [state.timer.currentProjectId!]: 0 // Session terminée, remettre à 0
           }
         },
         showSessionModal: false,
@@ -850,8 +954,8 @@ export const useNowStore = create<NowStore>((set, get) => ({
       };
     });
     
-    // Synchroniser immédiatement toutes les données
-    get().syncTimerState();
+    // Synchroniser uniquement l'état général
+    get().saveState();
     setTimeout(() => {
       const user = auth.currentUser;
       if (user?.uid) {
@@ -860,6 +964,9 @@ export const useNowStore = create<NowStore>((set, get) => ({
       } else {
         saveProjectsToLocalStorage(get().projects);
         saveSessionsToLocalStorage(get().sessions);
+        // SAUVEGARDER les sessions complétées et en cours dans localStorage
+        localStorage.setItem('projectSessions', JSON.stringify(get().timer.projectSessions));
+        localStorage.setItem('projectSessionProgress', JSON.stringify(get().timer.projectSessionProgress));
       }
     }, 100);
     
@@ -950,12 +1057,13 @@ export const useNowStore = create<NowStore>((set, get) => ({
     const today = new Date().toDateString();
     
     if (state.lastResetDate !== today) {
-      // Réinitialisation quotidienne
+      // Réinitialisation quotidienne - NE PAS vider projectSessionProgress
       set(() => ({
         timer: {
           ...state.timer,
           projectSessions: {},
-          projectSessionProgress: {},
+          // Garder projectSessionProgress pour les sessions en cours
+          projectSessionProgress: state.timer.projectSessionProgress,
         },
         lastResetDate: today,
       }));

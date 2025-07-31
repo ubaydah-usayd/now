@@ -17,20 +17,20 @@ export const useAuth = () => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       
-              if (user) {
-          // Utilisateur connecté - synchroniser avec Firebase
-          console.log('🔄 Synchronisation des données pour l\'utilisateur:', user.uid);
-          try {
-            firebaseManager.init(user.uid);
-            await useNowStore.getState().initDatabase();
-          } catch (error) {
-            console.error('Erreur lors de la synchronisation:', error);
-          }
-        } else {
-          // Utilisateur déconnecté - nettoyer les listeners
-          console.log('🧹 Nettoyage des listeners');
-          firebaseManager.cleanup();
+      if (user) {
+        // Utilisateur connecté - synchroniser avec Firebase
+        console.log('🔄 Synchronisation des données pour l\'utilisateur:', user.uid);
+        try {
+          firebaseManager.init(user.uid);
+          // L'initialisation de la base de données se fait maintenant dans App.tsx
+        } catch (error) {
+          console.error('Erreur lors de la synchronisation:', error);
         }
+      } else {
+        // Utilisateur déconnecté - nettoyer les listeners
+        console.log('🧹 Nettoyage des listeners');
+        firebaseManager.cleanup();
+      }
       
       setLoading(false);
     });

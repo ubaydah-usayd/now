@@ -18,12 +18,9 @@ export const Auth: React.FC = () => {
         <div className="bg-gray-800 p-8 rounded-lg shadow-xl max-w-md w-full mx-4">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-white mb-8">NOW</h1>
-            <img 
-              src="/verse.png" 
-              alt="Verse" 
-              className="max-w-xs mx-auto rounded-lg mb-8"
-              style={{ maxHeight: '200px' }}
-            />
+            <div className="max-w-xs mx-auto rounded-lg mb-8 bg-gray-700 p-8 flex items-center justify-center" style={{ maxHeight: '200px' }}>
+              <span className="text-4xl font-bold text-white">NOW</span>
+            </div>
             <p className="text-gray-300 mb-6">
               Connectez-vous pour accéder à votre gestionnaire de temps
             </p>
@@ -50,12 +47,20 @@ export const Auth: React.FC = () => {
       <div className="bg-gray-800 p-8 rounded-lg shadow-xl max-w-md w-full mx-4">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-white mb-8">NOW</h1>
-          <div className="mb-6">
-            <img 
-              src={user.photoURL || '/verse.png'} 
-              alt="Profile" 
-              className="w-16 h-16 rounded-full mx-auto mb-4"
-            />
+                      <div className="mb-6">
+              <div className="w-16 h-16 rounded-full mx-auto mb-4 bg-gray-700 flex items-center justify-center">
+                {user.photoURL ? (
+                  <img 
+                    src={user.photoURL} 
+                    alt="Profile" 
+                    className="w-16 h-16 rounded-full"
+                  />
+                ) : (
+                  <span className="text-white text-xl font-bold">
+                    {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                  </span>
+                )}
+              </div>
             <p className="text-white font-semibold">{user.displayName}</p>
             <p className="text-gray-400 text-sm">{user.email}</p>
           </div>
