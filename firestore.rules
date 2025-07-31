@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Règles pour les utilisateurs authentifiés
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Sous-collections pour les données de l'utilisateur
+      match /projects/{projectId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /tasks/{taskId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /sessions/{sessionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /dailyLogs/{logId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /timerState/{stateId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Règles par défaut - refuser tout accès non authentifié
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

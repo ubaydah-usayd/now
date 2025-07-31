@@ -1,0 +1,304 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #7c3aed 100%);
+    min-height: 100vh;
+    background-attachment: fixed;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    transition: background 1s ease-in-out;
+  }
+  
+  body {
+    @apply text-white font-sans;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #7c3aed 100%);
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    background-attachment: fixed;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    transition: background 1s ease-in-out;
+  }
+  
+  #root {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #7c3aed 100%);
+    min-height: 100vh;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    transition: background 1s ease-in-out;
+  }
+}
+
+@layer components {
+  .project-button {
+    @apply relative w-48 h-16 bg-transparent border border-white border-opacity-20 rounded-lg text-white font-semibold transition-all duration-300 hover:border-opacity-50 cursor-pointer overflow-hidden;
+  }
+  
+  .project-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--fill-percentage);
+    height: 100%;
+    background: linear-gradient(135deg, var(--project-color) 0%, var(--project-color-dark) 100%);
+    transition: width 0.3s ease;
+    z-index: 0;
+  }
+  
+  .project-button.basira::before {
+    --project-color: #3b82f6;
+    --project-color-dark: #1d4ed8;
+  }
+  
+  .project-button.ccie::before {
+    --project-color: #8b5cf6;
+    --project-color-dark: #7c3aed;
+  }
+  
+  .project-button.other::before {
+    --project-color: #59C9AF;
+    --project-color-dark: #4CAF50;
+  }
+  
+  .project-button.selected {
+    @apply border-2 shadow-lg;
+    border-color: #10b981;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    animation: projectPulse 2s ease-in-out infinite, projectBreath 3s ease-in-out infinite;
+  }
+  
+  .project-button.selected::before {
+    animation: progressBreath 3s ease-in-out infinite;
+  }
+  
+  @keyframes progressBreath {
+    0%, 100% {
+      opacity: 0.9;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes projectPulse {
+    0%, 100% {
+      border-color: #10b981;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    }
+    50% {
+      border-color: #ffffff;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    }
+  }
+  
+  @keyframes projectBreath {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+  }
+  
+  @keyframes startBlink {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.3;
+      transform: scale(1.1);
+    }
+  }
+  
+  .project-button span {
+    position: relative;
+    z-index: 1;
+  }
+  
+  /* Styles pour le changement de fond d'écran selon le projet */
+  .app-background {
+    transition: background 1s ease-in-out;
+  }
+  
+  .app-background.basira {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #3b82f6 100%);
+  }
+  
+  .app-background.ccie {
+    background: linear-gradient(135deg, #0f172a 0%, #4c1d95 50%, #8b5cf6 100%);
+  }
+  
+  .app-background.other {
+    background: linear-gradient(135deg, #0f172a 0%, #065f46 50%, #59C9AF 100%);
+  }
+  
+  .app-background.default {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #7c3aed 100%);
+  }
+  
+  .app-background.pause {
+    background: linear-gradient(135deg, #111827 0%, #1f2937 50%, #374151 100%);
+  }
+  
+  .app-background.start {
+    background: linear-gradient(135deg, #2d0610 0%, #450a0a 50%, #7f1d1d 100%);
+  }
+  
+  .task-item {
+    @apply flex items-center space-x-3 p-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-300 cursor-pointer;
+    animation: slideInFromRight 0.4s ease-out;
+  }
+
+  .task-item.completed {
+    animation: completeTask 0.6s ease-out;
+  }
+
+  .task-item.completing {
+    animation: completeTask 0.6s ease-out;
+  }
+
+  .task-item.deleting {
+    animation: slideOutToLeft 0.3s ease-in forwards;
+  }
+  
+  .timer-display {
+    @apply text-9xl font-black text-white text-center;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-stretch: normal;
+    letter-spacing: 0.1em;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+  
+  .timer-display.start-urgent {
+    animation: startBlink 1.5s ease-in-out infinite;
+  }
+  
+  .progress-bar {
+    @apply w-full h-2 bg-white bg-opacity-20 rounded-full overflow-hidden;
+  }
+  
+  .progress-fill {
+    @apply h-full bg-now-green transition-all duration-1000 ease-out;
+  }
+  
+  .indicator-dot {
+    @apply w-3 h-3 rounded-full transition-all duration-300;
+  }
+  
+  .indicator-dot.completed {
+    @apply bg-now-green shadow-lg;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+  }
+  
+  .indicator-dot.pending {
+    @apply bg-gray-400 bg-opacity-50;
+  }
+  
+  .indicator-dot.extra-session {
+    @apply border-2 border-yellow-400;
+  }
+  
+  .indicator-dot.extra-session.completed {
+    @apply bg-yellow-500 shadow-lg;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+  }
+  
+  .badge {
+    @apply absolute -top-2 -right-2 w-6 h-6 bg-now-red text-white text-xs font-bold rounded-full flex items-center justify-center z-20;
+  }
+  
+  .pause-button {
+    @apply w-16 h-16 bg-now-teal rounded-full flex items-center justify-center text-white hover:bg-opacity-80 transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg;
+  }
+  
+  .next-button {
+    @apply w-16 h-16 bg-now-orange rounded-full flex items-center justify-center text-white hover:bg-opacity-80 transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg;
+  }
+  
+  .modal-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50;
+  }
+  
+  .modal-content {
+    @apply bg-now-darker border border-white border-opacity-20 rounded-2xl p-8 max-w-2xl w-full mx-4;
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 100%);
+    backdrop-filter: blur(20px);
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* Animations pour les tâches */
+@keyframes slideInFromRight {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes completeTask {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+    background: rgba(16, 185, 129, 0.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes slideOutToLeft {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes bounce-slow {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  40%, 43% {
+    transform: translate3d(0, -8px, 0);
+  }
+  70% {
+    transform: translate3d(0, -4px, 0);
+  }
+  90% {
+    transform: translate3d(0, -2px, 0);
+  }
+} 
